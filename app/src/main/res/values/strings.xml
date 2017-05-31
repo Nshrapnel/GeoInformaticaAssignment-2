@@ -1,9 +1,4 @@
 <resources>
-    <string name="app_name">GeoInformaticaAssignment#2</string>
-    <string name="lbl_you_are_at">Your Current Location Is</string>
-    <string name="btn_get_location">Get My Location</string>
-    <string name="btn_start_location_updates">Start Location Updates</string>
-    <string name="btn_stop_location_updates">Stop Location Updates</string>
-    <string name="marker">Marker</string>
-    <string name="CouldNotGetLocation">(Couldn\'t get the location. Make sure location is enabled on the device)</string>
+    <string name="app_name">Where the hell am I?</string>
+    <string name="accessToken">pk.eyJ1Ijoic3NlbmVsZGkiLCJhIjoiY2ozYWdqNHUwMDQ2OTJ4czRrcGN5Z3UxdiJ9.O560JurZP70zxDRq1CK5qg</string>
 </resources>

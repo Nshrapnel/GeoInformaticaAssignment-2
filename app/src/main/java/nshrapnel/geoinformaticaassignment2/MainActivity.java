@@ -1,6 +1,5 @@
 package nshrapnel.geoinformaticaassignment2;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.location.Location;
@@ -8,43 +7,37 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.NonNull;
+import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.View;
-import android.widget.Button;
-import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GoogleApiAvailability;
-import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
-import com.google.android.gms.common.api.GoogleApiClient.OnConnectionFailedListener;
-import com.google.android.gms.location.LocationListener;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationServices;
+import com.mapbox.mapboxsdk.Mapbox;
+import com.mapbox.mapboxsdk.annotations.MarkerViewOptions;
+import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
+import com.mapbox.mapboxsdk.geometry.LatLng;
+import com.mapbox.mapboxsdk.location.LocationSource;
+import com.mapbox.mapboxsdk.maps.MapView;
+import com.mapbox.mapboxsdk.maps.MapboxMap;
+import com.mapbox.mapboxsdk.maps.OnMapReadyCallback;
+import com.mapbox.services.android.telemetry.location.LocationEngine;
+import com.mapbox.services.android.telemetry.location.LocationEngineListener;
+import com.mapbox.services.android.telemetry.permissions.PermissionsListener;
+import com.mapbox.services.android.telemetry.permissions.PermissionsManager;
+
+import java.util.List;
 
 
-public class MainActivity extends AppCompatActivity implements ConnectionCallbacks,
-        OnConnectionFailedListener, LocationListener {
+public class MainActivity extends AppCompatActivity implements PermissionsListener {
 
-    private static final String TAG = MainActivity.class.getSimpleName();
-
-    private final static int PLAY_SERVICES_RESOLUTION_REQUEST = 1000;
-
-    private final static int MY_PERMISSIONS_REQUEST_FINE_LOCATION = 1;
-
-    private Location mLastLocation;
-
-    private GoogleApiClient mGoogleApiClient;
-
-    private boolean mRequestingLocationUpdates = false;
-
-    private LocationRequest mLocationRequest;
-
-    private TextView lblLocation;
-    private Button btnStartLocationUpdates;
+    private MapView mapView;
+    private MapboxMap map;
+    private LocationEngine locationEngine;
+    private LocationEngineListener locationEngineListener;
+    private PermissionsManager permissionsManager;
+    private FloatingActionButton floatingActionButton;
+    private String address;
 
     @SuppressLint("HandlerLeak")
     private class GeocoderHandler extends Handler {
@@ -59,195 +52,151 @@ public class MainActivity extends AppCompatActivity implements ConnectionCallbac
                 default:
                     result = null;
             }
-            lblLocation.setText(result);
+            address = result;
         }
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Mapbox.getInstance(this, getString(R.string.accessToken));
         setContentView(R.layout.activity_main);
-
-        lblLocation = (TextView) findViewById(R.id.lblLocation);
-        Button btnShowLocation = (Button) findViewById(R.id.btnShowLocation);
-        btnStartLocationUpdates = (Button) findViewById(R.id.btnLocationUpdates);
-
-        if (checkPlayServices()) {
-            buildGoogleApiClient();
-            createLocationRequest();
-        }
-
-        btnShowLocation.setOnClickListener(new View.OnClickListener() {
+        locationEngine = LocationSource.getLocationEngine(this);
+        locationEngine.activate();
+        mapView = (MapView) findViewById(R.id.mapView);
+        mapView.onCreate(savedInstanceState);
+        mapView.getMapAsync(new OnMapReadyCallback() {
             @Override
-            public void onClick(View v) {
-                displayLocation();
+            public void onMapReady(MapboxMap mapboxMap) {
+                map = mapboxMap;
             }
         });
-
-        btnStartLocationUpdates.setOnClickListener(new View.OnClickListener() {
+        floatingActionButton = (FloatingActionButton) findViewById(R.id.location_toggle_fab);
+        floatingActionButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View v) {
-                togglePeriodicLocationUpdates();
-            }
-        });
-
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           @NonNull String permissions[],
-                                           @NonNull int[] grantResults) {
-        switch (requestCode) {
-            case MY_PERMISSIONS_REQUEST_FINE_LOCATION: {
-                if (grantResults.length <= 0 ||
-                        grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-                    Toast.makeText(MainActivity.this,
-                            "Permission denied to access Location",
-                            Toast.LENGTH_SHORT).show();
+            public void onClick(View view) {
+                if (map != null) {
+                    toggleGps(!map.isMyLocationEnabled());
                 }
             }
-        }
+        });
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        if (mGoogleApiClient != null) {
-            mGoogleApiClient.connect();
-        }
+        mapView.onStart();
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
-        checkPlayServices();
-        if (mGoogleApiClient.isConnected() && mRequestingLocationUpdates) {
-            startLocationUpdates();
-        }
+        mapView.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        mapView.onPause();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        if (mGoogleApiClient.isConnected()) {
-            mGoogleApiClient.disconnect();
+        mapView.onStop();
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        mapView.onLowMemory();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mapView.onDestroy();
+        if (locationEngineListener != null) {
+            locationEngine.removeLocationEngineListener(locationEngineListener);
         }
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        stopLocationUpdates();
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        mapView.onSaveInstanceState(outState);
     }
 
-    private void displayLocation() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    MY_PERMISSIONS_REQUEST_FINE_LOCATION);
-            return;
-        }
-        mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
-        if (mLastLocation != null) {
-            GeoHelper.getAddressFromLocation(mLastLocation, this, new GeocoderHandler());
-        } else {
-            lblLocation.setText(R.string.CouldNotGetLocation);
-        }
-    }
-
-    private void togglePeriodicLocationUpdates() {
-        if (!mRequestingLocationUpdates) {
-            btnStartLocationUpdates.setText(getString(R.string.btn_stop_location_updates));
-            mRequestingLocationUpdates = true;
-            startLocationUpdates();
-            Log.d(TAG, "Periodic location updates started.");
-            Toast.makeText(getApplicationContext(), "Periodic location updates started.",
-                    Toast.LENGTH_SHORT).show();
-        } else {
-            // Changing the button text
-            btnStartLocationUpdates.setText(getString(R.string.btn_start_location_updates));
-            mRequestingLocationUpdates = false;
-            stopLocationUpdates();
-            Log.d(TAG, "Periodic location updates stopped.");
-            Toast.makeText(getApplicationContext(), "Periodic location updates stopped.",
-                    Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    protected synchronized void buildGoogleApiClient() {
-        mGoogleApiClient = new GoogleApiClient.Builder(this)
-                .addApi(LocationServices.API)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                .build();
-    }
-
-    protected void createLocationRequest() {
-        mLocationRequest = new LocationRequest();
-        int UPDATE_INTERVAL = 10000;
-        mLocationRequest.setInterval(UPDATE_INTERVAL);
-        int FASTEST_INTERVAL = 5000;
-        mLocationRequest.setFastestInterval(FASTEST_INTERVAL);
-        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-        int DISPLACEMENT = 10;
-        mLocationRequest.setSmallestDisplacement(DISPLACEMENT);
-    }
-
-    private boolean checkPlayServices() {
-        GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
-        int resultCode = apiAvailability.isGooglePlayServicesAvailable(this);
-        if (resultCode != ConnectionResult.SUCCESS) {
-            if (apiAvailability.isUserResolvableError(resultCode)) {
-                apiAvailability.getErrorDialog(this, resultCode, PLAY_SERVICES_RESOLUTION_REQUEST)
-                        .show();
+    private void toggleGps(boolean enableGps) {
+        if (enableGps) {
+            permissionsManager = new PermissionsManager(this);
+            if (!PermissionsManager.areLocationPermissionsGranted(this)) {
+                permissionsManager.requestLocationPermissions(this);
             } else {
-                Log.i(TAG, "This device is not supported.");
-                finish();
+                enableLocation(true);
             }
-            return false;
-        }
-        return true;
-    }
-
-    protected void startLocationUpdates() {
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    MY_PERMISSIONS_REQUEST_FINE_LOCATION);
-            return;
-        }
-        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
-
-    }
-
-    protected void stopLocationUpdates() {
-        LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
-    }
-
-    @Override
-    public void onConnectionFailed(@NonNull ConnectionResult result) {
-        Log.i(TAG, "Connection failed: ConnectionResult.getErrorCode() = " + result.getErrorCode());
-    }
-
-    @Override
-    public void onConnected(Bundle arg0) {
-        displayLocation();
-        if (mRequestingLocationUpdates) {
-            startLocationUpdates();
+        } else {
+            enableLocation(false);
         }
     }
 
-    @Override
-    public void onConnectionSuspended(int arg0) {
-        mGoogleApiClient.connect();
+    private void enableLocation(boolean enabled) {
+        if (enabled) {
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+            Location lastLocation = locationEngine.getLastLocation();
+            if (lastLocation != null) {
+                LatLng coordinates = new LatLng(lastLocation);
+                map.moveCamera(CameraUpdateFactory.newLatLngZoom(coordinates, 10));
+                GeoHelper.getAddressFromLocation(lastLocation, this, new GeocoderHandler());
+                map.addMarker(new MarkerViewOptions()
+                        .position(new LatLng(coordinates.getLatitude(), coordinates.getLongitude()))
+                        .title(address));
+            }
+            locationEngineListener = new LocationEngineListener() {
+                @Override
+                public void onConnected() {
+                }
+
+                @Override
+                public void onLocationChanged(Location location) {
+                    if (location != null) {
+                        LatLng coordinates = new LatLng(location);
+                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(coordinates, 16));
+                        locationEngine.removeLocationEngineListener(this);
+                        GeoHelper.getAddressFromLocation(location, getApplicationContext(), new GeocoderHandler());
+                        map.addMarker(new MarkerViewOptions()
+                                .position(new LatLng(coordinates.getLatitude(), coordinates.getLongitude()))
+                                .title(address));
+                    }
+                }
+            };
+            locationEngine.addLocationEngineListener(locationEngineListener);
+            floatingActionButton.setImageResource(R.drawable.ic_location_disabled_24dp);
+        } else {
+            floatingActionButton.setImageResource(R.drawable.ic_my_location_24dp);
+        }
+        map.setMyLocationEnabled(enabled);
     }
 
     @Override
-    public void onLocationChanged(Location location) {
-        mLastLocation = location;
-        Toast.makeText(getApplicationContext(), "Location changed.", Toast.LENGTH_SHORT).show();
-        displayLocation();
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        permissionsManager.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
+    @Override
+    public void onExplanationNeeded(List<String> permissionsToExplain) {
+        Toast.makeText(this, "This app needs location permissions in order to show its functionality.",
+                Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    public void onPermissionResult(boolean granted) {
+        if (granted) {
+            enableLocation(true);
+        } else {
+            finish();
+        }
     }
 }
-
