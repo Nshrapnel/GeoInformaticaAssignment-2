@@ -1,0 +1,17 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="nshrapnel.geoinformaticaassignment2.ToGoList">
+
+    <item
+        android:id="@+id/go_to_map"
+        android:orderInCategory="100"
+        android:title="@string/go_to_map"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/instructions"
+        android:orderInCategory="100"
+        android:title="@string/instructions"
+        app:showAsAction="never" />
+</menu>

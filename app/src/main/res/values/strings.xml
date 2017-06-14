@@ -1,4 +1,7 @@
 <resources>
-    <string name="app_name">Where the hell am I?</string>
+    <string name="app_name">To Go List</string>
     <string name="accessToken">pk.eyJ1Ijoic3NlbmVsZGkiLCJhIjoiY2ozYWdqNHUwMDQ2OTJ4czRrcGN5Z3UxdiJ9.O560JurZP70zxDRq1CK5qg</string>
+    <string name="go_to_map">Go to Map</string>
+    <string name="instructions">Instructions</string>
+    <string name="instructions_text">With \'To Go List\' you can list the places to which you need to go, just write the address of those places, then tap on \'Go To Map\' and those addresses will be marked in the map with the order in which you need to go to them</string>
 </resources>
